@@ -5,6 +5,15 @@ spring:
     cache: false
 
   ai:
+    openai:
+      api-key: ${OPENAI_API_KEY:}
+      chat:
+        enabled: false        # we use Cerebras for chat, not OpenAI
+      embedding:
+        enabled: true
+        options:
+          model: ${rag.embedding.model:text-embedding-3-small}
+
     mcp:
       client:
         enabled: true
@@ -268,6 +277,14 @@ agent:
 
     # Cerebras does not support reasoning_effort — always omit.
     reasoning-effort: ""
+
+rag:
+  chunk-size: 800
+  overlap: 100
+  embedding:
+    enabled: true
+    model: text-embedding-3-small
+    dimension: 1536           # text-embedding-3-small default dimension
 
 logging:
   level:

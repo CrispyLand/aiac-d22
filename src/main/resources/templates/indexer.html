@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <title>RAG Indexer</title>
+    <style>
+        :root {
+            --bg: #f6f7f9;
+            --card: #ffffff;
+            --line: #e2e5ea;
+            --ink: #1c1f24;
+            --muted: #6b7280;
+            --accent: #3b5bdb;
+            --green: #2f9e44;
+            --red: #e03131;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            padding: 32px 20px 64px;
+            background: var(--bg);
+            color: var(--ink);
+            font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+        .wrap { max-width: 1100px; margin: 0 auto; }
+        h1 { font-size: 22px; margin: 0 0 4px; }
+        .sub { color: var(--muted); font-size: 13px; margin-bottom: 24px; }
+        .card {
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 18px;
+        }
+        h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em;
+             color: var(--muted); margin: 0 0 14px; }
+        h3 { font-size: 15px; font-weight: 600; margin: 0 0 10px; }
+        button {
+            background: var(--accent); color: #fff; border: 0; border-radius: 7px;
+            padding: 11px 22px; font: inherit; font-weight: 600; cursor: pointer;
+        }
+        button:hover { background: #364fc7; }
+        table {
+            width: 100%; border-collapse: collapse; font-size: 13px;
+        }
+        th {
+            text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase;
+            letter-spacing: .04em; color: var(--muted); padding: 8px 10px;
+            border-bottom: 2px solid var(--line); background: #f8f9fa;
+        }
+        td {
+            padding: 8px 10px; border-bottom: 1px solid var(--line);
+            vertical-align: top;
+        }
+        tr:last-child td { border-bottom: 0; }
+        tr:hover td { background: #f8f9fa; }
+        .badge {
+            display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px;
+            font-weight: 600; letter-spacing: .03em;
+        }
+        .badge-fixed { background: #dbe4ff; color: #3b5bdb; }
+        .badge-structured { background: #d3f9d8; color: #2f9e44; }
+        .mono { font-family: "SF Mono", "Fira Code", monospace; font-size: 12px; }
+        .text-preview {
+            font-family: "SF Mono", "Fira Code", monospace; font-size: 11px;
+            color: var(--muted); white-space: pre-wrap; word-break: break-all;
+            max-height: 80px; overflow: hidden;
+        }
+        .empty-state {
+            text-align: center; padding: 48px 20px; color: var(--muted);
+        }
+        .empty-state p { font-size: 16px; margin-bottom: 4px; }
+        .empty-state small { font-size: 13px; }
+        .stat { display: inline-block; margin-right: 20px; }
+        .stat b { color: var(--ink); }
+        nav { margin-bottom: 24px; }
+        nav a { color: var(--accent); text-decoration: none; font-size: 14px; }
+        nav a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <nav><a href="/">&#8592; Back to Chat</a></nav>
+    <h1>RAG Indexer</h1>
+    <p class="sub">Chunks documents from <code>classpath:docs/</code>, generates OpenAI embeddings, and writes index files to <code>data/</code>.</p>
+
+    <!-- Re-index button -->
+    <div class="card">
+        <h2>Actions</h2>
+        <form method="post" th:action="@{/indexer/reindex}">
+            <button type="submit">Re-index Documents</button>
+        </form>
+        <p style="margin-top:10px; font-size:13px; color:var(--muted);">
+            Indexing runs in the background. Refresh the page after a few seconds to see updated stats.
+        </p>
+    </div>
+
+    <!-- No index state -->
+    <div class="card empty-state" th:if="${fixed == null and structured == null}">
+        <p>No index found</p>
+        <small>Click "Re-index Documents" above to build the index.</small>
+    </div>
+
+    <!-- Comparison table -->
+    <div class="card" th:if="${fixed != null or structured != null}">
+        <h2>Index Comparison</h2>
+        <table>
+            <thead>
+            <tr>
+                <th>Strategy</th>
+                <th>Chunks</th>
+                <th>Avg size (chars)</th>
+                <th>Min</th>
+                <th>Max</th>
+                <th>Embedding model</th>
+                <th>Dimension</th>
+                <th>Indexed at</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:if="${fixed != null}">
+                <td><span class="badge badge-fixed">fixed</span></td>
+                <td th:text="${fixed.metadata().totalChunks()}">0</td>
+                <td th:text="${fixed.metadata().avgChunkSize()}">0</td>
+                <td th:text="${fixed.metadata().minChunkSize()}">0</td>
+                <td th:text="${fixed.metadata().maxChunkSize()}">0</td>
+                <td class="mono" th:text="${fixed.metadata().embeddingModel()}">—</td>
+                <td th:text="${fixed.metadata().embeddingDimension()}">0</td>
+                <td class="mono" style="font-size:11px" th:text="${fixed.metadata().indexedAt()}">—</td>
+            </tr>
+            <tr th:if="${structured != null}">
+                <td><span class="badge badge-structured">structured</span></td>
+                <td th:text="${structured.metadata().totalChunks()}">0</td>
+                <td th:text="${structured.metadata().avgChunkSize()}">0</td>
+                <td th:text="${structured.metadata().minChunkSize()}">0</td>
+                <td th:text="${structured.metadata().maxChunkSize()}">0</td>
+                <td class="mono" th:text="${structured.metadata().embeddingModel()}">—</td>
+                <td th:text="${structured.metadata().embeddingDimension()}">0</td>
+                <td class="mono" style="font-size:11px" th:text="${structured.metadata().indexedAt()}">—</td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Fixed-size sample chunks -->
+    <div class="card" th:if="${fixedSamples != null}">
+        <h2>Fixed-size — sample chunks</h2>
+        <table>
+            <thead>
+            <tr>
+                <th>#</th>
+                <th>Chunk ID</th>
+                <th>Section</th>
+                <th>Chars</th>
+                <th>Text preview</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="chunk : ${fixedSamples}">
+                <td th:text="${chunk.chunkIndex()}">0</td>
+                <td class="mono" th:text="${chunk.chunkId()}">—</td>
+                <td th:text="${chunk.section()}">—</td>
+                <td th:text="${chunk.charLength()}">0</td>
+                <td>
+                    <div class="text-preview" th:text="${#strings.abbreviate(chunk.text(), 200)}"></div>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Structured sample chunks -->
+    <div class="card" th:if="${structuredSamples != null}">
+        <h2>Structured — sample chunks</h2>
+        <table>
+            <thead>
+            <tr>
+                <th>#</th>
+                <th>Chunk ID</th>
+                <th>Section</th>
+                <th>Chars</th>
+                <th>Text preview</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="chunk : ${structuredSamples}">
+                <td th:text="${chunk.chunkIndex()}">0</td>
+                <td class="mono" th:text="${chunk.chunkId()}">—</td>
+                <td th:text="${chunk.section()}">—</td>
+                <td th:text="${chunk.charLength()}">0</td>
+                <td>
+                    <div class="text-preview" th:text="${#strings.abbreviate(chunk.text(), 200)}"></div>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+</body>
+</html>
