@@ -1,6 +1,7 @@
 target/
 !.mvn/wrapper/maven-wrapper.jar
 
+### RAG index files — rebuilt from source docs, not committed
 ### Persisted conversation history — contains real user messages
 /data/
 

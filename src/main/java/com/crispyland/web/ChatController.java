@@ -26,6 +26,10 @@ import com.crispyland.agent.task.BlockedTurn;
 import com.crispyland.agent.task.PausedTurn;
 import com.crispyland.agent.task.TaskStage;
 import com.crispyland.agent.task.TaskState;
+import com.crispyland.rag.Chunk;
+import com.crispyland.rag.RagSearcher;
+import com.crispyland.rag.RagState;
+import com.crispyland.rag.ScoredChunk;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.util.Arrays;
@@ -55,11 +59,14 @@ public class ChatController {
     private final Profiles profiles;
     private final PersonaSelector personas;
     private final ActiveProfile activeProfile;
+    private final RagState ragState;
+    private final RagSearcher ragSearcher;
 
     public ChatController(Agent agent, AgentProperties properties,
                           ConversationIdResolver conversationIds, Branches branches,
                           LongTermStore longTerm, Profiles profiles, PersonaSelector personas,
-                          ActiveProfile activeProfile) {
+                          ActiveProfile activeProfile,
+                          RagState ragState, RagSearcher ragSearcher) {
         this.agent = agent;
         this.properties = properties;
         this.conversationIds = conversationIds;
@@ -68,6 +75,8 @@ public class ChatController {
         this.profiles = profiles;
         this.personas = personas;
         this.activeProfile = activeProfile;
+        this.ragState = ragState;
+        this.ragSearcher = ragSearcher;
     }
 
     @GetMapping("/")
@@ -87,6 +96,8 @@ public class ChatController {
         addPersona(model, request, selection);
         model.addAttribute("budget", agent.budget(scope, selection.persona(), config));
         addOptions(model, config);
+        model.addAttribute("ragEnabled", ragState.isEnabled());
+        model.addAttribute("ragSources", List.of());
         return "chat";
     }
 
@@ -123,6 +134,8 @@ public class ChatController {
             model.addAttribute("error", "Some parameters could not be read — check the numeric fields.");
             addMemory(model, scope, agent.transcript(scope.conversation()));
             model.addAttribute("budget", agent.budget(scope, persona, properties.defaultConfig()));
+            model.addAttribute("ragEnabled", ragState.isEnabled());
+            model.addAttribute("ragSources", List.of());
             return "chat";
         }
 
@@ -134,10 +147,22 @@ public class ChatController {
             agent.resumeTask(scope);
         }
 
+        // RAG: embed the question, retrieve relevant chunks, and prepend them to the prompt.
+        List<ScoredChunk> ragSources = List.of();
+        String effectiveInput = form.userInput();
+        if (ragState.isEnabled()) {
+            ragSources = ragSearcher.search(form.userInput());
+            if (!ragSources.isEmpty()) {
+                effectiveInput = buildRagPrompt(ragSources, form.userInput());
+            }
+        }
+        model.addAttribute("ragEnabled", ragState.isEnabled());
+
         try {
-            AgentResult result = agent.handle(scope, persona, form.userInput(), form.toAgentConfig(),
-                    PausedTurn.from(whenPaused), BlockedTurn.from(whenBlocked));
+            AgentResult result = agent.handle(scope, persona, form.userInput(), effectiveInput,
+                    form.toAgentConfig(), PausedTurn.from(whenPaused), BlockedTurn.from(whenBlocked));
             model.addAttribute("result", result);
+            model.addAttribute("ragSources", ragSources);
             addMemory(model, scope, result.transcript());
             model.addAttribute("budget", agent.budget(scope, persona, result.effectiveConfig()));
             // Keep the settings the agent actually used, but clear the box for the next turn.
@@ -146,21 +171,25 @@ public class ChatController {
             // Not an error, and deliberately not silent. The typed message is still in the box
             // because this branch leaves the bound form alone, so "Resume and send" re-posts it.
             model.addAttribute("paused", e.getMessage());
+            model.addAttribute("ragSources", List.of());
             addMemory(model, scope, agent.transcript(scope.conversation()));
             model.addAttribute("budget", agent.budget(scope, persona, form.toAgentConfig()));
         } catch (StageBlockedException e) {
             // Same shape as the pause: not an error, and the typed message stays in the box so
             // whichever button they pick re-posts it rather than making them write it twice.
             model.addAttribute("blocked", e.getMessage());
+            model.addAttribute("ragSources", List.of());
             addMemory(model, scope, agent.transcript(scope.conversation()));
             model.addAttribute("budget", agent.budget(scope, persona, form.toAgentConfig()));
         } catch (ContextOverflowException e) {
             // Show the budget that caused the refusal, not the one the dialogue merely sits at.
             model.addAttribute("error", e.getMessage());
             model.addAttribute("budget", e.budget());
+            model.addAttribute("ragSources", List.of());
             addMemory(model, scope, agent.transcript(scope.conversation()));
         } catch (AgentException e) {
             model.addAttribute("error", e.getMessage());
+            model.addAttribute("ragSources", List.of());
             addMemory(model, scope, agent.transcript(scope.conversation()));
             model.addAttribute("budget", agent.budget(scope, persona, form.toAgentConfig()));
         }
@@ -431,6 +460,18 @@ public class ChatController {
                                    HttpServletRequest request, HttpServletResponse response) {
         agent.restoreInvariant(scope(request, response), id);
         return "redirect:/";
+    }
+
+    private String buildRagPrompt(List<ScoredChunk> sources, String question) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("Relevant context retrieved from the codebase:\n\n");
+        for (ScoredChunk sc : sources) {
+            Chunk c = sc.chunk();
+            sb.append("--- [").append(c.sourceFile()).append(" | ").append(c.section()).append("] ---\n");
+            sb.append(c.text()).append("\n\n");
+        }
+        sb.append("---\n\nUser question: ").append(question);
+        return sb.toString();
     }
 
     /** One text box, comma-separated — a term per line would be a second way to say the same thing. */

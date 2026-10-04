@@ -1,7 +1,12 @@
 package com.crispyland.rag;
 
 import java.io.IOException;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Controller;
@@ -35,7 +40,20 @@ public class IndexerController {
                 f.chunks().subList(0, Math.min(3, f.chunks().size()))));
         structuredOpt.ifPresent(s -> model.addAttribute("structuredSamples",
                 s.chunks().subList(0, Math.min(3, s.chunks().size()))));
+        // per-file breakdown: sourceFile → chunk count, sorted by file name
+        structuredOpt.ifPresent(s -> model.addAttribute("structuredFiles", fileBreakdown(s.chunks())));
+        fixedOpt.ifPresent(f -> model.addAttribute("fixedFiles", fileBreakdown(f.chunks())));
         return "indexer";
+    }
+
+    /** Groups chunks by sourceFile, returns a map sorted alphabetically by file name. */
+    private static Map<String, Long> fileBreakdown(List<Chunk> chunks) {
+        return chunks.stream()
+                .collect(Collectors.groupingBy(Chunk::sourceFile, Collectors.counting()))
+                .entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue,
+                        (a, b) -> a, LinkedHashMap::new));
     }
 
     @PostMapping("/reindex")

@@ -281,6 +281,10 @@ agent:
 rag:
   chunk-size: 800
   overlap: 100
+  index-dir: ./data/index   # NEW — where chunks-*.json are written/read
+  search:                    # NEW — retrieval parameters
+    top-k: 3
+    min-score: 0.3
   embedding:
     enabled: true
     model: text-embedding-3-small

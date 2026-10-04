@@ -84,6 +84,14 @@
     <h1>RAG Indexer</h1>
     <p class="sub">Chunks documents from <code>classpath:docs/</code>, generates OpenAI embeddings, and writes index files to <code>data/</code>.</p>
 
+    <!-- Flash messages -->
+    <div th:if="${uploadOk}" style="background:#ebfbee;border:1px solid #b2e7c0;color:#2b8a3e;
+                border-radius:8px;padding:10px 16px;margin-bottom:16px;font-size:13px;"
+         th:text="${uploadOk}"></div>
+    <div th:if="${uploadError}" style="background:#fff5f5;border:1px solid #ffc9c9;color:#c92a2a;
+                border-radius:8px;padding:10px 16px;margin-bottom:16px;font-size:13px;"
+         th:text="${uploadError}"></div>
+
     <!-- Re-index button -->
     <div class="card">
         <h2>Actions</h2>
@@ -92,6 +100,34 @@
         </form>
         <p style="margin-top:10px; font-size:13px; color:var(--muted);">
             Indexing runs in the background. Refresh the page after a few seconds to see updated stats.
+        </p>
+    </div>
+
+    <!-- Upload a single file to merge into the structured index -->
+    <div class="card">
+        <h2>Upload &amp; Index a File</h2>
+        <form method="post" action="/rag/upload" enctype="multipart/form-data"
+              style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
+            <div style="flex:2;min-width:200px;">
+                <label style="display:block;font-size:11px;font-weight:600;color:var(--muted);
+                              text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;">File</label>
+                <input type="file" name="file" accept=".java,.md,.yml,.yaml,.txt,.pdf"
+                       style="width:100%;font-size:13px;padding:6px 10px;border:1px solid var(--line);
+                              border-radius:7px;background:#fff;"/>
+            </div>
+            <div style="flex:2;min-width:180px;">
+                <label style="display:block;font-size:11px;font-weight:600;color:var(--muted);
+                              text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;">Label (optional)</label>
+                <input type="text" name="label" placeholder="e.g. docs/my-design-doc.md"
+                       style="width:100%;font-size:13px;padding:6px 10px;border:1px solid var(--line);
+                              border-radius:7px;background:#fff;"/>
+            </div>
+            <button type="submit" style="padding:8px 18px;font-size:13px;white-space:nowrap;">Index file</button>
+        </form>
+        <p style="margin-top:10px;font-size:12px;color:var(--muted);">
+            Supported: <code>.java</code> <code>.md</code> <code>.yml</code> <code>.txt</code> <code>.pdf</code> —
+            chunked with the structured strategy and merged into the structured index.
+            Label overrides the source file name shown in search results; leave blank to use the filename.
         </p>
     </div>
 
@@ -137,6 +173,28 @@
                 <td class="mono" th:text="${structured.metadata().embeddingModel()}">—</td>
                 <td th:text="${structured.metadata().embeddingDimension()}">0</td>
                 <td class="mono" style="font-size:11px" th:text="${structured.metadata().indexedAt()}">—</td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Indexed files breakdown -->
+    <div class="card" th:if="${structuredFiles != null or fixedFiles != null}">
+        <h2>Indexed Files</h2>
+        <table>
+            <thead>
+            <tr>
+                <th>Source file</th>
+                <th style="text-align:right">Structured chunks</th>
+                <th style="text-align:right">Fixed chunks</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="entry : ${structuredFiles}">
+                <td class="mono" th:text="${entry.key}">—</td>
+                <td class="mono" style="text-align:right" th:text="${entry.value}">0</td>
+                <td class="mono" style="text-align:right"
+                    th:text="${fixedFiles != null ? fixedFiles[entry.key] : '—'}">—</td>
             </tr>
             </tbody>
         </table>

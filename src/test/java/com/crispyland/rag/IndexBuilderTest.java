@@ -30,7 +30,8 @@ class IndexBuilderTest {
     void setUp() {
         loader    = mock(DocumentLoader.class);
         store     = mock(IndexStore.class);
-        props     = new RagProperties(100, 10,
+        props     = new RagProperties(100, 10, "./data/index",
+                new RagProperties.Search(3, 0.3f),
                 new RagProperties.Embedding(false, "no-op", 3));
         embedding = new NoOpEmbeddingAdapter(props);
 

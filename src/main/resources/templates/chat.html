@@ -250,6 +250,27 @@
         .mcparg .req { color: #c92a2a; font-weight: 700; }
         .mcparg .opt { opacity: .7; }
 
+        /* RAG. Purple and distinct from teal MCP — it is a retrieval layer, not a live server. */
+        .card.rag { border-left: 3px solid #7950f2; }
+        .raghead { display: flex; align-items: center; justify-content: space-between;
+                   gap: 12px; font-size: 12px; color: var(--muted); margin-bottom: 12px; }
+        .raghead b { color: #5f3dc4; font-size: 14px; }
+        .rag-sources { margin-top: 12px; font-size: 12px; color: var(--muted); }
+        .rag-source { display: flex; align-items: baseline; gap: 8px; padding: 4px 0;
+                      border-bottom: 1px solid #ede9fc; font-size: 12px; }
+        .rag-source:last-child { border-bottom: 0; }
+        .rag-score { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+                     font-size: 11px; font-weight: 700; color: #5f3dc4;
+                     background: #f3f0ff; border: 1px solid #d0bfff;
+                     border-radius: 4px; padding: 1px 5px; white-space: nowrap; }
+        .rag-file { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+                    font-size: 11px; color: #495057; }
+        .rag-section { color: var(--muted); }
+        .rag-upload { margin-top: 14px; padding-top: 12px; border-top: 1px dashed #d0bfff;
+                      display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+        .rag-upload input[type=file] { flex: 1; font-size: 12px; }
+        .rag-upload button { padding: 6px 14px; font-size: 12px; }
+
         /* The briefing card. Teal like MCP and deliberately so — it is the same process, and a
            second colour would suggest a second thing to keep track of. What is different is the
            ordering inside it: the sentence is set as prose at reading size and the figures are a
@@ -683,6 +704,45 @@
         </div>
     </div>
 
+    <!-- RAG. Purple, distinct from teal MCP. Shows the on/off switch, search parameters,
+         a file upload form, and (after a turn) the chunks that were retrieved. -->
+    <div class="card rag">
+        <div class="raghead">
+            <span>
+                <span class="lamp" th:classappend="${ragEnabled} ? 'on' : ''"></span>
+                <b>RAG</b> ·
+                <span th:if="${ragEnabled}">Structured index active · top-3 · min score 0.3</span>
+                <span th:unless="${ragEnabled}" style="color:var(--muted)">off — index not consulted</span>
+            </span>
+            <button type="submit" form="ragToggleForm" class="pchip"
+                    th:classappend="${ragEnabled} ? 'on' : ''"
+                    th:text="${ragEnabled} ? 'Turn off' : 'Turn on'"
+                    title="Toggle whether retrieved chunks are prepended to each question.">Turn off</button>
+        </div>
+
+        <!-- RAG sources from the last turn — shown only when retrieval returned something. -->
+        <div th:if="${ragSources != null and !#lists.isEmpty(ragSources)}">
+            <details>
+                <summary th:text="'Sources used (' + ${#lists.size(ragSources)} + ' chunk(s))'">Sources used</summary>
+                <div class="rag-sources">
+                    <div class="rag-source" th:each="sc : ${ragSources}">
+                        <span class="rag-score"
+                              th:text="'[' + ${#numbers.formatDecimal(sc.score(), 1, 2)} + ']'"></span>
+                        <span class="rag-file" th:text="${sc.chunk().sourceFile()}"></span>
+                        <span class="rag-section" th:if="${sc.chunk().section() != null and sc.chunk().section() != ''}"
+                              th:text="'| ' + ${sc.chunk().section()}"></span>
+                    </div>
+                </div>
+            </details>
+        </div>
+
+        <!-- Upload a file to add it to the structured index without a full re-index. -->
+        <form class="rag-upload" method="post" action="/rag/upload" enctype="multipart/form-data">
+            <input type="file" name="file" accept=".java,.md,.yml,.txt"/>
+            <button type="submit">Index file</button>
+        </form>
+    </div>
+
     <!-- Personalization, which is NOT a memory layer. Everything in the panel above is something
          the agent worked out from what was said; this is what somebody declared about how they
          want to be answered. Switching it leaves every memory layer untouched on purpose — same
@@ -1094,6 +1154,7 @@
          is why one form each is enough for all of them. -->
     <form id="mcpToggleForm" method="post" action="/mcp/toggle"></form>
     <form id="mcpServerToggleForm" method="post" action="/mcp/server/toggle"></form>
+    <form id="ragToggleForm" method="post" action="/rag/toggle"></form>
     <!-- Two forms, not one: the dropdown posts on change and the button posts on click, and a
          single form would make each of them carry the other's field. -->
     <form id="briefingScheduleForm" method="post" action="/briefing/schedule"></form>

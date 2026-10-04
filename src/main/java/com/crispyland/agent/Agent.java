@@ -181,6 +181,18 @@ public class Agent {
      */
     public AgentResult handle(MemoryScope scope, Persona persona, String userInput,
                               AgentConfig config, PausedTurn whenPaused, BlockedTurn whenBlocked) {
+        return handle(scope, persona, userInput, null, config, whenPaused, whenBlocked);
+    }
+
+    /**
+     * Same turn, but with a separate {@code llmInput} that is sent to the model instead of
+     * {@code userInput}. Used by the RAG layer to inject retrieved context into the LLM call
+     * while storing only the original question in the transcript.
+     * <p>
+     * When {@code llmInput} is {@code null} the behaviour is identical to the six-argument overload.
+     */
+    public AgentResult handle(MemoryScope scope, Persona persona, String userInput, String llmInput,
+                              AgentConfig config, PausedTurn whenPaused, BlockedTurn whenBlocked) {
         MemoryScope where = (scope == null) ? MemoryScope.of(null) : scope;
         Persona who = (persona == null) ? Persona.NONE : persona;
         String id = where.conversation();
@@ -254,8 +266,11 @@ public class Agent {
 
         // Priced before a byte leaves the process: an oversized prompt is billed as a
         // rejection, so the cheapest place to find out it will not fit is here.
+        // llmInput carries RAG-enriched context when the retrieval layer is active; the
+        // original question (prompt) is still what goes into the transcript and memory.
+        String contextInput = (llmInput != null) ? llmInput : prompt;
         ContextPlanner.ContextPlan plan =
-                contextPlanner.plan(effective, who, rules, memory, prompt, offered);
+                contextPlanner.plan(effective, who, rules, memory, contextInput, offered);
         ContextBudget budget = plan.budget();
         if (budget.trimmed()) {
             log.info("Context trim: dropped {} oldest message(s) to fit {} of {} tokens",

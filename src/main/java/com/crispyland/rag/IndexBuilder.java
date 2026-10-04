@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -51,6 +52,29 @@ public class IndexBuilder {
         IndexFile file = new IndexFile(meta, chunks);
         store.save(file, strategy);
         return file;
+    }
+
+    /**
+     * Chunks, embeds, and merges a single document into the existing structured index.
+     * Existing chunks from the same sourceFile are replaced, not duplicated.
+     */
+    public void mergeDocument(LoadedDocument doc) throws IOException {
+        List<Chunk> newChunks = structured.chunk(doc);
+        newChunks = embedAll(newChunks);
+
+        // Load existing, remove stale chunks for this source, append new
+        Optional<IndexFile> existing = store.load("structured");
+        List<Chunk> merged = new ArrayList<>();
+        if (existing.isPresent()) {
+            existing.get().chunks().stream()
+                .filter(c -> !c.sourceFile().equals(doc.sourceFile()))
+                .forEach(merged::add);
+        }
+        merged.addAll(newChunks);
+
+        IndexMetadata meta = buildMetadata("structured", merged);
+        store.save(new IndexFile(meta, merged), "structured");
+        log.info("IndexBuilder.mergeDocument: merged {} new chunks from {}", newChunks.size(), doc.sourceFile());
     }
 
     private List<Chunk> embedAll(List<Chunk> chunks) {
